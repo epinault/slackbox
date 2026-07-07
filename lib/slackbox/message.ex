@@ -62,4 +62,41 @@ defmodule Slackbox.Message do
   @doc "Toggle Slack link unfurling for this message."
   @spec unfurl_links(t(), boolean()) :: t()
   def unfurl_links(%__MODULE__{} = msg, bool), do: %{msg | unfurl_links: bool}
+
+  @doc "Set the Block Kit blocks for this message."
+  @spec blocks(t(), [map()]) :: t()
+  def blocks(%__MODULE__{} = msg, blocks), do: %{msg | blocks: blocks}
+
+  @doc "A Block Kit `section` block with mrkdwn text."
+  @spec section(String.t()) :: map()
+  def section(text) do
+    %{"type" => "section", "text" => %{"type" => "mrkdwn", "text" => text}}
+  end
+
+  @doc "A Block Kit `actions` block wrapping interactive elements."
+  @spec actions([map()]) :: map()
+  def actions(elements), do: %{"type" => "actions", "elements" => elements}
+
+  @doc """
+  A Block Kit `button` element. Supported opts: `:action_id`, `:value`.
+  Nil opts are dropped so the payload matches Slack's shape.
+  """
+  @spec button(String.t(), keyword()) :: map()
+  def button(text, opts \\ []) do
+    %{"type" => "button", "text" => %{"type" => "plain_text", "text" => text}}
+    |> maybe_put("action_id", Keyword.get(opts, :action_id))
+    |> maybe_put("value", Keyword.get(opts, :value))
+  end
+
+  @doc "Collect every `action_id` from the message's `actions` blocks, in order."
+  @spec action_ids(t()) :: [String.t()]
+  def action_ids(%__MODULE__{blocks: blocks}) do
+    blocks
+    |> Enum.filter(&(&1["type"] == "actions"))
+    |> Enum.flat_map(fn block -> Enum.map(block["elements"] || [], & &1["action_id"]) end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

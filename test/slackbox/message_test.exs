@@ -27,4 +27,47 @@ defmodule Slackbox.MessageTest do
       assert msg.unfurl_links == false
     end
   end
+
+  describe "block kit" do
+    test "blocks/2 stores blocks built from section/actions/button" do
+      msg =
+        new()
+        |> to_channel("#alerts")
+        |> blocks([
+          section("Build *failed* on `main`"),
+          actions([
+            button("Retry", action_id: "retry_build", value: "1234"),
+            button("View logs", action_id: "view_logs")
+          ])
+        ])
+
+      assert [section_block, actions_block] = msg.blocks
+      assert section_block["type"] == "section"
+      assert section_block["text"] == %{"type" => "mrkdwn", "text" => "Build *failed* on `main`"}
+      assert actions_block["type"] == "actions"
+      assert [retry, _logs] = actions_block["elements"]
+      assert retry["type"] == "button"
+      assert retry["action_id"] == "retry_build"
+      assert retry["value"] == "1234"
+    end
+
+    test "action_ids/1 collects action_ids across all action blocks" do
+      msg =
+        new()
+        |> blocks([
+          actions([button("Retry", action_id: "retry_build")]),
+          section("ignored"),
+          actions([
+            button("Approve", action_id: "approve"),
+            button("Reject", action_id: "reject")
+          ])
+        ])
+
+      assert Slackbox.Message.action_ids(msg) == ["retry_build", "approve", "reject"]
+    end
+
+    test "action_ids/1 is empty when there are no action blocks" do
+      assert Slackbox.Message.action_ids(new()) == []
+    end
+  end
 end
