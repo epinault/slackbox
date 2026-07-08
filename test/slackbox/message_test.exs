@@ -53,8 +53,7 @@ defmodule Slackbox.MessageTest do
 
     test "action_ids/1 collects action_ids across all action blocks" do
       msg =
-        new()
-        |> blocks([
+        blocks(new(), [
           actions([button("Retry", action_id: "retry_build")]),
           section("ignored"),
           actions([
