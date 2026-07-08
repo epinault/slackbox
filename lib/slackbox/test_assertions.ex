@@ -10,9 +10,8 @@ defmodule Slackbox.TestAssertions do
         assert_message_sent(channel: "#alerts", text: ~r/failed/)
       end
 
-  Attribute assertions match against the *next* captured message of that action
-  in the process mailbox (same semantics as Swoosh). A `Regex` value is matched
-  with `=~`; any other value with `==`. A 1-arity function is called with the
+  Attribute assertions match against the *first matching* captured message (assertions are non-destructive).
+  A `Regex` value is matched with `=~`; any other value with `==`. A 1-arity function is called with the
   `%Slackbox.Message{}` for custom assertions.
   """
 
@@ -34,17 +33,25 @@ defmodule Slackbox.TestAssertions do
     args
   end
 
-  @doc "Refute a `post_message` matching attrs (default: any) was sent."
+  @doc "Refute that any captured `post_message` matches attrs (default: refute any was sent)."
   def refute_message_sent(attrs \\ []) do
-    receive do
+    {:messages, pending} = Process.info(self(), :messages)
+
+    match =
+      Enum.find(pending, fn
+        {:slackbox, :post_message, %{message: message}} ->
+          attrs == [] or attrs_match?(message, attrs)
+
+        _other ->
+          false
+      end)
+
+    case match do
+      nil ->
+        :ok
+
       {:slackbox, :post_message, %{message: message}} ->
-        if attrs == [] or attrs_match?(message, attrs) do
-          flunk(
-            "Expected no post_message matching #{inspect(attrs)}, but got: #{inspect(message)}"
-          )
-        end
-    after
-      0 -> :ok
+        flunk("Expected no post_message matching #{inspect(attrs)}, but got: #{inspect(message)}")
     end
   end
 

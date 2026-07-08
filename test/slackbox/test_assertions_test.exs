@@ -36,6 +36,15 @@ defmodule Slackbox.TestAssertionsTest do
     assert_message_updated(text: "edited")
   end
 
+  test "refute_message_sent/1 fails when a matching message is not the first captured" do
+    TestNotifier.post_message(Message.new(channel: "#general"))
+    TestNotifier.post_message(Message.new(channel: "#alerts"))
+
+    assert_raise ExUnit.AssertionError, fn ->
+      refute_message_sent(channel: "#alerts")
+    end
+  end
+
   test "assert_view_opened yields the trigger_id and view" do
     TestNotifier.open_view("trigger-9", %{type: "modal", callback_id: "cfg"})
 
