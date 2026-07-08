@@ -14,9 +14,8 @@ defmodule Slackbox.TestAssertionsTest do
   end
 
   test "assert_message_sent/1 accepts a predicate function" do
-    msg =
-      Message.new(channel: "#alerts")
-      |> Message.blocks([Message.actions([Message.button("Retry", action_id: "retry_build")])])
+    buttons = [Message.button("Retry", action_id: "retry_build")]
+    msg = Message.blocks(Message.new(channel: "#alerts"), [Message.actions(buttons)])
 
     TestNotifier.post_message(msg)
 

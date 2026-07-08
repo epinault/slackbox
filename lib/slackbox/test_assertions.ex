@@ -64,11 +64,11 @@ defmodule Slackbox.TestAssertions do
     {:messages, pending} = Process.info(self(), :messages)
 
     case Enum.find(pending, fn
-           {:slackbox, ^action, %{message: _}} -> true
-           _ -> false
+           {:slackbox, ^action, %{message: _msg}} -> true
+           _other -> false
          end) do
       nil -> flunk("Expected a #{action} to have been sent, but none was captured.")
-      {:slackbox, _, %{message: message}} -> message
+      {:slackbox, _action, %{message: message}} -> message
     end
   end
 
