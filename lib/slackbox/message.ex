@@ -97,6 +97,18 @@ defmodule Slackbox.Message do
     |> Enum.reject(&is_nil/1)
   end
 
+  @doc "Serialize to a Slack Web API payload map (drops nil/empty fields)."
+  @spec to_payload(t()) :: map()
+  def to_payload(%__MODULE__{} = m) do
+    %{"channel" => m.channel}
+    |> maybe_put("text", m.text)
+    |> maybe_put("blocks", (m.blocks != [] && m.blocks) || nil)
+    |> maybe_put("thread_ts", m.thread_ts)
+    |> maybe_put("ts", m.ts)
+    |> maybe_put("user", m.user)
+    |> maybe_put("username", m.username)
+  end
+
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

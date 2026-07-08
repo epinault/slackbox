@@ -56,22 +56,22 @@ defmodule Slackbox.TestAssertions do
   end
 
   defp assert_message(action, fun) when is_function(fun, 1) do
-    message = receive_message(action)
+    message = receive_message(action, fn _msg -> true end)
     fun.(message)
     message
   end
 
   defp assert_message(action, attrs) when is_list(attrs) do
-    message = receive_message(action)
+    message = receive_message(action, &attrs_match?(&1, attrs))
     Enum.each(attrs, fn {key, expected} -> assert_attr(message, key, expected) end)
     message
   end
 
-  defp receive_message(action) do
+  defp receive_message(action, matcher) do
     {:messages, pending} = Process.info(self(), :messages)
 
     case Enum.find(pending, fn
-           {:slackbox, ^action, %{message: _msg}} -> true
+           {:slackbox, ^action, %{message: msg}} -> matcher.(msg)
            _other -> false
          end) do
       nil -> flunk("Expected a #{action} to have been sent, but none was captured.")

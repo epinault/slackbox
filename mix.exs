@@ -37,6 +37,14 @@ defmodule Slackbox.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      # Web / LiveView (fake Slack dev UI + demo server)
+      {:phoenix, "~> 1.7"},
+      {:phoenix_live_view, "~> 1.0"},
+      {:phoenix_html, "~> 4.1"},
+      {:phoenix_pubsub, "~> 2.1"},
+      {:bandit, "~> 1.5"},
+      {:jason, "~> 1.4"},
+
       # Code quality and documentation
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

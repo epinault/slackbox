@@ -45,6 +45,14 @@ defmodule Slackbox.TestAssertionsTest do
     end
   end
 
+  test "assert_message_sent/1 finds a matching message even when it is not first" do
+    TestNotifier.post_message(Message.new(channel: "#general"))
+    TestNotifier.post_message(Message.new(channel: "#alerts", text: "boom"))
+
+    assert_message_sent(channel: "#alerts")
+    assert_message_sent(text: ~r/boom/)
+  end
+
   test "assert_view_opened yields the trigger_id and view" do
     TestNotifier.open_view("trigger-9", %{type: "modal", callback_id: "cfg"})
 

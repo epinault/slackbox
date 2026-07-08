@@ -2,6 +2,34 @@
 
 **TODO: Add description**
 
+## Trying the fake Slack UI (dev)
+
+Run the self-contained demo server from the project root:
+
+```bash
+mix slackbox.demo
+```
+
+Then open <http://localhost:4000>. You'll see a Slack-like UI — a channel
+sidebar, messages rendered with Block Kit (section text + buttons), and a
+per-message "{ } raw" toggle that shows the outgoing Slack payload. Seeded
+messages land in `#alerts` and `#deploys`.
+
+Messages update in real time (LiveView). To push your own from an IEx session:
+
+```bash
+iex -S mix
+```
+
+```elixir
+Slackbox.Demo.start()
+Slackbox.Demo.post("hello", "#alerts")
+```
+
+The new message appears in the browser instantly. Under the hood the
+`Slackbox.Adapters.Local` adapter writes messages into the in-memory
+`Slackbox.Store`, which broadcasts over `Phoenix.PubSub` to the dashboard.
+
 ## Usage (outbound + tests)
 
 Define a notifier:
