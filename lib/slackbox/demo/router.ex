@@ -16,4 +16,10 @@ defmodule Slackbox.Demo.Router do
     pipe_through(:browser)
     live("/", Slackbox.DashboardLive, :index)
   end
+
+  # The sample app that receives simulated Slack interactions.
+  forward("/demo", Slackbox.Demo.SlackApp)
+
+  # Receives `response_url` callbacks and updates the store.
+  forward("/slackbox/response", Slackbox.ResponsePlug)
 end

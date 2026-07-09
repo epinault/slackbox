@@ -49,6 +49,25 @@ defmodule Slackbox.DashboardLive do
      |> assign(:messages, messages_for(ch))}
   end
 
+  def handle_event("action", %{"ts" => ts} = params, socket) do
+    entry = Enum.find(socket.assigns.messages, &(&1.ts == ts))
+    config = simulator_config()
+
+    cond do
+      is_nil(entry) ->
+        {:noreply, socket}
+
+      is_nil(Map.get(config, :interactivity_url)) ->
+        {:noreply,
+         put_flash(socket, :error, "No simulator configured — set :slackbox, :simulator.")}
+
+      true ->
+        action = %{"action_id" => params["action_id"], "value" => params["value"]}
+        Slackbox.Simulator.click(entry, action, config)
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("toggle_raw", %{"ts" => ts}, socket) do
     open_raw = socket.assigns.open_raw
 
@@ -62,6 +81,16 @@ defmodule Slackbox.DashboardLive do
 
   defp messages_for(nil), do: []
   defp messages_for(channel), do: Store.list_messages(channel)
+
+  @default_config %{
+    response_base: "http://localhost:4000/slackbox/response",
+    signing_secret: nil,
+    user: "U_DEMO"
+  }
+
+  defp simulator_config do
+    Map.merge(@default_config, Application.get_env(:slackbox, :simulator, %{}))
+  end
 
   @impl Phoenix.LiveView
   def render(assigns) do
@@ -108,7 +137,7 @@ defmodule Slackbox.DashboardLive do
               <div :if={entry.message.text} class="sb-text">{entry.message.text}</div>
 
               <div :for={block <- entry.message.blocks} class="sb-block">
-                {render_block(assigns, block)}
+                {render_block(assigns, entry.ts, block)}
               </div>
 
               <div class="sb-raw-toggle">
@@ -125,7 +154,7 @@ defmodule Slackbox.DashboardLive do
     """
   end
 
-  defp render_block(assigns, %{"type" => "section"} = block) do
+  defp render_block(assigns, _ts, %{"type" => "section"} = block) do
     assigns = assign(assigns, :text, block_text(block))
 
     ~H"""
@@ -133,19 +162,27 @@ defmodule Slackbox.DashboardLive do
     """
   end
 
-  defp render_block(assigns, %{"type" => "actions", "elements" => elements}) do
-    assigns = assign(assigns, :elements, elements)
+  defp render_block(assigns, ts, %{"type" => "actions", "elements" => elements}) do
+    assigns = assigns |> assign(:elements, elements) |> assign(:ts, ts)
 
     ~H"""
     <div class="sb-actions">
-      <button :for={el <- @elements} type="button" class="sb-btn">
+      <button
+        :for={el <- @elements}
+        type="button"
+        class="sb-btn"
+        phx-click="action"
+        phx-value-ts={@ts}
+        phx-value-action_id={el["action_id"]}
+        phx-value-value={el["value"]}
+      >
         {block_text(el)}
       </button>
     </div>
     """
   end
 
-  defp render_block(assigns, block) do
+  defp render_block(assigns, _ts, block) do
     assigns = assign(assigns, :type, block["type"] || "block")
 
     ~H"""

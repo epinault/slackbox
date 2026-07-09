@@ -14,6 +14,7 @@ defmodule Mix.Tasks.Slackbox.Demo do
   def run(_args) do
     {:ok, _} = Application.ensure_all_started(:phoenix_live_view)
     {:ok, _} = Application.ensure_all_started(:bandit)
+    {:ok, _} = Application.ensure_all_started(:req)
     {:ok, _} = Slackbox.Demo.start()
     Process.sleep(:infinity)
   end

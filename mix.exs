@@ -45,6 +45,9 @@ defmodule Slackbox.MixProject do
       {:bandit, "~> 1.5"},
       {:jason, "~> 1.4"},
 
+      # HTTP client (inbound interaction simulation loop)
+      {:req, "~> 0.5"},
+
       # Code quality and documentation
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

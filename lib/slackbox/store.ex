@@ -50,8 +50,30 @@ defmodule Slackbox.Store do
   @spec clear() :: :ok
   def clear, do: GenServer.call(__MODULE__, :clear)
 
+  @doc """
+  Register a `response_url` callback token for the entry identified by
+  `{channel, ts}`. Returns an opaque random token; a later `apply_response/2`
+  with that token updates the corresponding message. Mirrors Slack's
+  `response_url` mechanism for the inbound simulation loop.
+  """
+  @spec register_response(String.t() | nil, String.t()) :: String.t()
+  def register_response(channel, ts),
+    do: GenServer.call(__MODULE__, {:register_response, channel, ts})
+
+  @doc """
+  Apply a Slack response payload to the message a `token` points at.
+
+  `response_map["text"]` overrides the message text when present and
+  `response_map["blocks"]` overrides the blocks when present; the raw payload is
+  recomputed and a `{:slackbox_store, :update, entry}` broadcast is emitted.
+  Returns `{:error, :not_found}` for an unknown token.
+  """
+  @spec apply_response(String.t(), map()) :: :ok | {:error, :not_found}
+  def apply_response(token, response_map),
+    do: GenServer.call(__MODULE__, {:apply_response, token, response_map})
+
   @impl GenServer
-  def init(:ok), do: {:ok, %{entries: []}}
+  def init(:ok), do: {:ok, %{entries: [], tokens: %{}}}
 
   @impl GenServer
   def handle_call({:put, message}, _from, %{entries: entries} = state) do
@@ -85,8 +107,46 @@ defmodule Slackbox.Store do
 
   def handle_call(:clear, _from, state) do
     broadcast(:clear, nil)
-    {:reply, :ok, %{state | entries: []}}
+    {:reply, :ok, %{state | entries: [], tokens: %{}}}
   end
+
+  def handle_call({:register_response, channel, ts}, _from, %{tokens: tokens} = state) do
+    token = :crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false)
+    {:reply, token, %{state | tokens: Map.put(tokens, token, {channel, ts})}}
+  end
+
+  def handle_call({:apply_response, token, response_map}, _from, %{tokens: tokens} = state) do
+    case Map.fetch(tokens, token) do
+      {:ok, {channel, ts}} ->
+        {entries, updated} = update_entry(state.entries, channel, ts, response_map)
+        Enum.each(updated, &broadcast(:update, &1))
+        {:reply, :ok, %{state | entries: entries}}
+
+      :error ->
+        {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  defp update_entry(entries, channel, ts, response_map) do
+    Enum.map_reduce(entries, [], fn entry, acc ->
+      if entry.channel == channel and entry.ts == ts do
+        message = apply_response_to_message(entry.message, response_map)
+        updated = %{entry | message: message, raw: Message.to_payload(message)}
+        {updated, [updated | acc]}
+      else
+        {entry, acc}
+      end
+    end)
+  end
+
+  defp apply_response_to_message(message, response_map) do
+    message
+    |> maybe_override(:text, Map.get(response_map, "text"))
+    |> maybe_override(:blocks, Map.get(response_map, "blocks"))
+  end
+
+  defp maybe_override(message, _key, nil), do: message
+  defp maybe_override(message, key, value), do: Map.put(message, key, value)
 
   defp generate_ts do
     "#{System.system_time(:second)}.#{:erlang.unique_integer([:positive])}"

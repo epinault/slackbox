@@ -51,4 +51,31 @@ defmodule Slackbox.StoreTest do
     assert :ok = Store.clear()
     assert Store.list_channels() == []
   end
+
+  test "register_response/2 returns an opaque token" do
+    %{ts: ts} = Store.put(new(channel: "#alerts", text: "a"))
+    token = Store.register_response("#alerts", ts)
+    assert is_binary(token)
+    assert byte_size(token) > 0
+  end
+
+  test "apply_response/2 updates the entry text and broadcasts :update" do
+    start_supervised!({Phoenix.PubSub, name: Slackbox.PubSub})
+    Phoenix.PubSub.subscribe(Slackbox.PubSub, "slackbox")
+
+    %{ts: ts} = Store.put(new(channel: "#alerts", text: "original"))
+    token = Store.register_response("#alerts", ts)
+
+    assert :ok = Store.apply_response(token, %{"text" => "updated ✅ acknowledge"})
+
+    [entry] = Store.list_messages("#alerts")
+    assert entry.message.text == "updated ✅ acknowledge"
+    assert entry.raw["text"] == "updated ✅ acknowledge"
+
+    assert_receive {:slackbox_store, :update, ^entry}
+  end
+
+  test "apply_response/2 with an unknown token returns error" do
+    assert {:error, :not_found} = Store.apply_response("nope", %{"text" => "x"})
+  end
 end

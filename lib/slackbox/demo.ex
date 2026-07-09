@@ -24,6 +24,13 @@ defmodule Slackbox.Demo do
   def start(opts \\ []) do
     port = Keyword.get(opts, :port, @default_port)
 
+    Application.put_env(:slackbox, :simulator, %{
+      interactivity_url: "http://localhost:#{port}/demo/interactivity",
+      response_base: "http://localhost:#{port}/slackbox/response",
+      signing_secret: nil,
+      user: "U_DEMO"
+    })
+
     Application.put_env(:slackbox, Slackbox.Demo.Endpoint,
       url: [host: "localhost"],
       http: [ip: {127, 0, 0, 1}, port: port],
@@ -69,7 +76,7 @@ defmodule Slackbox.Demo do
     |> blocks([
       section(":rotating_light: *High error rate* on `web-prod` — 5.4% over the last 5m."),
       actions([
-        button("Acknowledge", action_id: "ack", value: "incident-42"),
+        button("Acknowledge", action_id: "acknowledge", value: "incident-42"),
         button("View dashboard", action_id: "view_dashboard")
       ])
     ])
