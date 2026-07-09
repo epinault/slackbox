@@ -106,6 +106,34 @@ defmodule Slackbox.Demo.Layouts do
             padding: 12px; border-radius: 6px; font-size: 12px;
             overflow-x: auto; white-space: pre;
           }
+
+          /* Header tools */
+          .sb-header-tools { display: flex; align-items: center; gap: 10px; }
+          .sb-btn--tool { cursor: pointer; font-size: 13px; padding: 6px 12px; }
+          .sb-btn--primary {
+            cursor: pointer; background: #007a5a; color: #fff; border-color: #007a5a;
+          }
+          .sb-btn--primary:hover { background: #148567; }
+
+          /* Modal overlay */
+          .sb-modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,.5);
+            display: flex; align-items: center; justify-content: center; z-index: 50;
+          }
+          .sb-modal {
+            background: #fff; border-radius: 10px; width: 480px; max-width: 90vw;
+            padding: 24px; box-shadow: 0 12px 48px rgba(0,0,0,.35);
+          }
+          .sb-modal-title { font-size: 20px; font-weight: 800; margin-bottom: 16px; }
+          .sb-modal-block { margin-bottom: 14px; }
+          .sb-modal-label { display: block; font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+          .sb-modal-input {
+            width: 100%; font-size: 15px; padding: 9px 12px;
+            border: 1px solid #d0d0d0; border-radius: 4px;
+          }
+          .sb-modal-actions {
+            display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;
+          }
         </style>
       </head>
       <body>

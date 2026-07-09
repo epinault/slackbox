@@ -26,6 +26,7 @@ defmodule Slackbox.Demo do
 
     Application.put_env(:slackbox, :simulator, %{
       interactivity_url: "http://localhost:#{port}/demo/interactivity",
+      events_url: "http://localhost:#{port}/demo/events",
       response_base: "http://localhost:#{port}/slackbox/response",
       signing_secret: nil,
       user: "U_DEMO"
@@ -86,6 +87,16 @@ defmodule Slackbox.Demo do
     |> to_channel("#alerts")
     |> Message.text("Error rate back to normal (0.3%)")
     |> Map.put(:username, "monitoring")
+    |> Store.put()
+
+    new()
+    |> to_channel("#alerts")
+    |> Message.text("Tune alert thresholds for `web-prod`")
+    |> Map.put(:username, "monitoring")
+    |> blocks([
+      section("*Alert configuration* — open the modal to name a new alert."),
+      actions([button("Open config", action_id: "open_config")])
+    ])
     |> Store.put()
 
     new()

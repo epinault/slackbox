@@ -24,6 +24,8 @@ defmodule Slackbox.Store do
           at: integer()
         }
 
+  @type view :: %{view_id: String.t(), trigger_id: String.t(), view: map()}
+
   @doc "Start the store (registered under its module name by default)."
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -72,8 +74,28 @@ defmodule Slackbox.Store do
   def apply_response(token, response_map),
     do: GenServer.call(__MODULE__, {:apply_response, token, response_map})
 
+  @doc """
+  Open a modal `view` for `trigger_id`. Generates a `view_id`, appends a view
+  entry, broadcasts `{:slackbox_store, :view_open, entry}`, and returns
+  `%{view_id: view_id}` — mirroring Slack's `views.open` response.
+  """
+  @spec open_view(String.t(), map()) :: %{view_id: String.t()}
+  def open_view(trigger_id, view),
+    do: GenServer.call(__MODULE__, {:open_view, trigger_id, view})
+
+  @doc """
+  Close the modal identified by `view_id`, broadcasting
+  `{:slackbox_store, :view_close, view_id}`.
+  """
+  @spec close_view(String.t()) :: :ok
+  def close_view(view_id), do: GenServer.call(__MODULE__, {:close_view, view_id})
+
+  @doc "List the currently open modal views, in insertion order (newest last)."
+  @spec list_views() :: [view()]
+  def list_views, do: GenServer.call(__MODULE__, :list_views)
+
   @impl GenServer
-  def init(:ok), do: {:ok, %{entries: [], tokens: %{}}}
+  def init(:ok), do: {:ok, %{entries: [], tokens: %{}, views: []}}
 
   @impl GenServer
   def handle_call({:put, message}, _from, %{entries: entries} = state) do
@@ -107,7 +129,23 @@ defmodule Slackbox.Store do
 
   def handle_call(:clear, _from, state) do
     broadcast(:clear, nil)
-    {:reply, :ok, %{state | entries: [], tokens: %{}}}
+    {:reply, :ok, %{state | entries: [], tokens: %{}, views: []}}
+  end
+
+  def handle_call({:open_view, trigger_id, view}, _from, %{views: views} = state) do
+    view_id = "V" <> (:crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false))
+    entry = %{view_id: view_id, trigger_id: trigger_id, view: view}
+    broadcast(:view_open, entry)
+    {:reply, %{view_id: view_id}, %{state | views: views ++ [entry]}}
+  end
+
+  def handle_call({:close_view, view_id}, _from, %{views: views} = state) do
+    broadcast(:view_close, view_id)
+    {:reply, :ok, %{state | views: Enum.reject(views, &(&1.view_id == view_id))}}
+  end
+
+  def handle_call(:list_views, _from, %{views: views} = state) do
+    {:reply, views, state}
   end
 
   def handle_call({:register_response, channel, ts}, _from, %{tokens: tokens} = state) do

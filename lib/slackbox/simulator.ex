@@ -66,10 +66,90 @@ defmodule Slackbox.Simulator do
     user = Map.get(config, :user, @default_user)
 
     payload = build_block_actions(entry, action, %{user: user, response_url: response_url})
-    body = "payload=" <> URI.encode_www_form(Jason.encode!(payload))
-    headers = build_headers(body, Map.get(config, :signing_secret))
+    post_interaction(config.interactivity_url, payload, config)
+  end
 
-    case Req.post(config.interactivity_url, headers: headers, body: body) do
+  @doc """
+  Build a Slack `view_submission` interaction payload.
+
+  Merges `view_id` and the collected `state` (Block Kit `state.values`) into
+  `view`. `opts` carries `:user`. Exposed for testing.
+  """
+  @spec build_view_submission(String.t(), map(), map(), map()) :: map()
+  def build_view_submission(view_id, view, state, opts) do
+    %{
+      "type" => "view_submission",
+      "user" => %{"id" => Map.get(opts, :user, @default_user)},
+      "api_app_id" => @api_app_id,
+      "token" => @verification_token,
+      "trigger_id" => trigger_id(),
+      "view" => Map.merge(view, %{"id" => view_id, "state" => %{"values" => state}})
+    }
+  end
+
+  @doc """
+  Simulate a modal submission, POSTing a `view_submission` interaction to
+  `config.interactivity_url`. Signed when `config.signing_secret` is set.
+  """
+  @spec submit_view(String.t(), map(), map(), map()) :: {:ok, integer()} | {:error, term()}
+  def submit_view(view_id, view, state, config) do
+    user = Map.get(config, :user, @default_user)
+    payload = build_view_submission(view_id, view, state, %{user: user})
+    post_interaction(config.interactivity_url, payload, config)
+  end
+
+  @doc """
+  Build a Slack `view_closed` interaction payload. `opts` carries `:user`.
+  Exposed for testing.
+  """
+  @spec build_view_closed(String.t(), map(), map()) :: map()
+  def build_view_closed(view_id, view, opts) do
+    %{
+      "type" => "view_closed",
+      "user" => %{"id" => Map.get(opts, :user, @default_user)},
+      "api_app_id" => @api_app_id,
+      "token" => @verification_token,
+      "view" => Map.merge(view, %{"id" => view_id})
+    }
+  end
+
+  @doc """
+  Simulate closing a modal, POSTing a `view_closed` interaction to
+  `config.interactivity_url`. Signed when `config.signing_secret` is set.
+  """
+  @spec close_view(String.t(), map(), map()) :: {:ok, integer()} | {:error, term()}
+  def close_view(view_id, view, config) do
+    user = Map.get(config, :user, @default_user)
+    payload = build_view_closed(view_id, view, %{user: user})
+    post_interaction(config.interactivity_url, payload, config)
+  end
+
+  @doc """
+  Wrap `event` in a Slack `event_callback` envelope (Events API). Exposed for
+  testing.
+  """
+  @spec build_event_callback(map()) :: map()
+  def build_event_callback(event) do
+    %{
+      "type" => "event_callback",
+      "team_id" => "T_SLACKBOX",
+      "api_app_id" => @api_app_id,
+      "event_id" => "Ev" <> (:erlang.unique_integer([:positive]) |> Integer.to_string()),
+      "event_time" => System.system_time(:second),
+      "event" => event
+    }
+  end
+
+  @doc """
+  Deliver `event` to the app's Events API URL (`config.events_url`) as a JSON
+  body. Signed over the raw JSON body when `config.signing_secret` is set.
+  """
+  @spec send_event(map(), map()) :: {:ok, integer()} | {:error, term()}
+  def send_event(event, config) do
+    body = Jason.encode!(build_event_callback(event))
+    headers = json_headers(body, Map.get(config, :signing_secret))
+
+    case Req.post(config.events_url, headers: headers, body: body) do
       {:ok, %Req.Response{status: status}} -> {:ok, status}
       {:error, reason} -> {:error, reason}
     end
@@ -77,18 +157,45 @@ defmodule Slackbox.Simulator do
     error -> {:error, error}
   end
 
-  defp build_headers(body, signing_secret) when is_binary(signing_secret) do
-    ts = "#{System.system_time(:second)}"
+  # Form-encode `payload` and POST it to `url`, signing when configured.
+  defp post_interaction(url, payload, config) do
+    body = "payload=" <> URI.encode_www_form(Jason.encode!(payload))
+    headers = form_headers(body, Map.get(config, :signing_secret))
 
+    case Req.post(url, headers: headers, body: body) do
+      {:ok, %Req.Response{status: status}} -> {:ok, status}
+      {:error, reason} -> {:error, reason}
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  defp form_headers(body, signing_secret) when is_binary(signing_secret) do
     [
-      {"content-type", "application/x-www-form-urlencoded"},
-      {"x-slack-request-timestamp", ts},
-      {"x-slack-signature", Signature.sign(signing_secret, ts, body)}
+      {"content-type", "application/x-www-form-urlencoded"}
+      | signature_headers(body, signing_secret)
     ]
   end
 
-  defp build_headers(_body, _signing_secret) do
+  defp form_headers(_body, _signing_secret) do
     [{"content-type", "application/x-www-form-urlencoded"}]
+  end
+
+  defp json_headers(body, signing_secret) when is_binary(signing_secret) do
+    [{"content-type", "application/json"} | signature_headers(body, signing_secret)]
+  end
+
+  defp json_headers(_body, _signing_secret) do
+    [{"content-type", "application/json"}]
+  end
+
+  defp signature_headers(body, signing_secret) do
+    ts = "#{System.system_time(:second)}"
+
+    [
+      {"x-slack-request-timestamp", ts},
+      {"x-slack-signature", Signature.sign(signing_secret, ts, body)}
+    ]
   end
 
   defp trigger_id do

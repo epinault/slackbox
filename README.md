@@ -72,6 +72,50 @@ then mounts `Slackbox.ResponsePlug` (at `response_base`) in its router to close
 the loop, and puts the resolved map into `:slackbox, :simulator` before serving
 the dashboard.
 
+### Modals & events
+
+The dashboard also simulates **modals (views)** and the **Events API**.
+
+**Modal loop.** When your app calls `open_view(trigger_id, view)` (or, in the
+demo, when a `block_actions` handler does), the modal is registered in the store
+and pops up as an overlay in the dashboard. The user fills the inputs and clicks
+**Save**, firing a real HTTP `view_submission` POST to your interactivity URL;
+your app reads `view.state.values` and reacts. **Close** fires `view_closed`
+instead. In `mix slackbox.demo`: open `#alerts`, click **Open config** → a
+"Configure alert" modal appears → type a name → **Save**, and the sample app
+posts a `🛠️ Config saved: name = …` message back into `#alerts`.
+
+**Events.** The message-pane header has a **⚡ Simulate event** button. Clicking
+it delivers an `event_callback` (an `app_mention`) to your app's Events API URL
+as an `application/json` body (signed over the raw body when a secret is set).
+The demo app replies with a `👋 …you rang?` message. This needs one extra
+simulator config key:
+
+- `:events_url` — your app's Slack Events API request URL. Events use a JSON
+  body (not form-urlencoded); leave unset to disable the Simulate-event button.
+
+### Unit-testing your endpoints (`Slackbox.Test`)
+
+`Slackbox.Test` builds the same inbound payloads without the UI or a server, so
+you can drive your controllers/plugs directly:
+
+```elixir
+# block_actions — form-urlencoded interaction body
+payload = Slackbox.Test.block_actions(action_id: "retry", user: "U1", channel: "#alerts")
+conn = post(conn, "/slack/interactivity", Slackbox.Test.form_body(payload))
+
+# view_submission
+state = %{"name_block" => %{"name" => %{"type" => "plain_text_input", "value" => "prod"}}}
+payload = Slackbox.Test.view_submission(callback_id: "config_modal", state: state)
+
+# Events API — JSON body
+payload = Slackbox.Test.event("app_mention", text: "<@U_BOT> hi", channel: "#alerts")
+conn = post(conn, "/slack/events", Jason.encode!(payload))
+```
+
+`Slackbox.Test.signature_headers/2` builds matching signing headers for tests
+that verify signature checking.
+
 ## Usage (outbound + tests)
 
 Define a notifier:

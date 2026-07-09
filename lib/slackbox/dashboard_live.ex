@@ -26,6 +26,7 @@ defmodule Slackbox.DashboardLive do
      |> assign(:channels, channels)
      |> assign(:selected, selected)
      |> assign(:messages, messages_for(selected))
+     |> assign(:views, Store.list_views())
      |> assign(:open_raw, MapSet.new())}
   end
 
@@ -38,7 +39,8 @@ defmodule Slackbox.DashboardLive do
      socket
      |> assign(:channels, channels)
      |> assign(:selected, selected)
-     |> assign(:messages, messages_for(selected))}
+     |> assign(:messages, messages_for(selected))
+     |> assign(:views, Store.list_views())}
   end
 
   @impl Phoenix.LiveView
@@ -68,6 +70,55 @@ defmodule Slackbox.DashboardLive do
     end
   end
 
+  def handle_event("view_submit", params, socket) do
+    view_id = params["view_id"]
+    config = simulator_config()
+
+    case find_view(socket.assigns.views, view_id) do
+      nil ->
+        {:noreply, socket}
+
+      view ->
+        state = collect_state(params)
+        Slackbox.Simulator.submit_view(view_id, view, state, config)
+        Store.close_view(view_id)
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("view_close", %{"view_id" => view_id}, socket) do
+    config = simulator_config()
+
+    case find_view(socket.assigns.views, view_id) do
+      nil ->
+        {:noreply, socket}
+
+      view ->
+        Slackbox.Simulator.close_view(view_id, view, config)
+        Store.close_view(view_id)
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("simulate_event", %{"type" => type}, socket) do
+    config = simulator_config()
+
+    if Map.get(config, :events_url) do
+      event = %{
+        "type" => type,
+        "user" => "U_DEMO",
+        "text" => "<@U_BOT> hello",
+        "channel" => socket.assigns.selected,
+        "ts" => "1.1"
+      }
+
+      Slackbox.Simulator.send_event(event, config)
+      {:noreply, socket}
+    else
+      {:noreply, put_flash(socket, :error, "No events URL configured — set :events_url.")}
+    end
+  end
+
   def handle_event("toggle_raw", %{"ts" => ts}, socket) do
     open_raw = socket.assigns.open_raw
 
@@ -82,10 +133,29 @@ defmodule Slackbox.DashboardLive do
   defp messages_for(nil), do: []
   defp messages_for(channel), do: Store.list_messages(channel)
 
+  defp find_view(views, view_id), do: Enum.find(views, &(&1.view_id == view_id))
+
+  # Collect `"block_id::action_id"` form params into Block Kit `state.values`.
+  defp collect_state(params) do
+    params
+    |> Enum.reduce(%{}, fn
+      {key, value}, acc ->
+        case String.split(key, "::", parts: 2) do
+          [block_id, action_id] ->
+            entry = %{"type" => "plain_text_input", "value" => value}
+            Map.update(acc, block_id, %{action_id => entry}, &Map.put(&1, action_id, entry))
+
+          _ ->
+            acc
+        end
+    end)
+  end
+
   @default_config %{
     response_base: "http://localhost:4000/slackbox/response",
     signing_secret: nil,
-    user: "U_DEMO"
+    user: "U_DEMO",
+    events_url: nil
   }
 
   defp simulator_config do
@@ -117,7 +187,17 @@ defmodule Slackbox.DashboardLive do
           <div class="sb-header-title">
             <span class="sb-hash">#</span>{channel_name(@selected) || "no channel"}
           </div>
-          <span class="sb-chip">DEV · SLACKBOX</span>
+          <div class="sb-header-tools">
+            <button
+              type="button"
+              class="sb-btn sb-btn--tool"
+              phx-click="simulate_event"
+              phx-value-type="app_mention"
+            >
+              ⚡ Simulate event
+            </button>
+            <span class="sb-chip">DEV · SLACKBOX</span>
+          </div>
         </header>
 
         <div class="sb-messages">
@@ -150,7 +230,74 @@ defmodule Slackbox.DashboardLive do
           </div>
         </div>
       </main>
+
+      <div :if={@views != []} class="sb-modal-backdrop">
+        {render_modal(assigns, List.last(@views))}
+      </div>
     </div>
+    """
+  end
+
+  defp render_modal(assigns, %{view_id: view_id, view: view}) do
+    assigns =
+      assigns
+      |> assign(:view_id, view_id)
+      |> assign(:view, view)
+      |> assign(:title, get_in(view, ["title", "text"]) || "Modal")
+      |> assign(:submit_text, get_in(view, ["submit", "text"]) || "Submit")
+      |> assign(:blocks, view["blocks"] || [])
+
+    ~H"""
+    <div class="sb-modal">
+      <div class="sb-modal-title">{@title}</div>
+      <form phx-submit="view_submit" phx-value-view_id={@view_id}>
+        <div :for={block <- @blocks} class="sb-modal-block">
+          {render_modal_block(assigns, block)}
+        </div>
+        <div class="sb-modal-actions">
+          <button
+            type="button"
+            class="sb-btn sb-btn--tool"
+            phx-click="view_close"
+            phx-value-view_id={@view_id}
+          >
+            Close
+          </button>
+          <button type="submit" class="sb-btn sb-btn--primary">{@submit_text}</button>
+        </div>
+      </form>
+    </div>
+    """
+  end
+
+  defp render_modal_block(
+         assigns,
+         %{"type" => "input", "element" => %{"type" => "plain_text_input"}} = block
+       ) do
+    assigns =
+      assigns
+      |> assign(:label, get_in(block, ["label", "text"]) || "")
+      |> assign(:name, "#{block["block_id"]}::#{block["element"]["action_id"]}")
+
+    ~H"""
+    <label class="sb-modal-label">{@label}</label>
+    <input type="text" name={@name} class="sb-modal-input" />
+    """
+  end
+
+  defp render_modal_block(assigns, %{"type" => "section"} = block) do
+    assigns = assign(assigns, :text, block_text(block))
+
+    ~H"""
+    <div class="sb-section">{@text}</div>
+    """
+  end
+
+  defp render_modal_block(assigns, block) do
+    assigns = assign(assigns, :type, block["type"] || "block")
+
+    ~H"""
+    <div class="sb-section sb-section--unknown">[{@type}]</div>
     """
   end
 

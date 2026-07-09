@@ -78,4 +78,35 @@ defmodule Slackbox.StoreTest do
   test "apply_response/2 with an unknown token returns error" do
     assert {:error, :not_found} = Store.apply_response("nope", %{"text" => "x"})
   end
+
+  test "open_view/2 returns a view_id and list_views/0 reflects it, broadcasting :view_open" do
+    start_supervised!({Phoenix.PubSub, name: Slackbox.PubSub})
+    Phoenix.PubSub.subscribe(Slackbox.PubSub, "slackbox")
+
+    view = %{"type" => "modal", "callback_id" => "cfg"}
+    assert %{view_id: view_id} = Store.open_view("trig-1", view)
+    assert String.starts_with?(view_id, "V")
+
+    assert [%{view_id: ^view_id, trigger_id: "trig-1", view: ^view}] = Store.list_views()
+    assert_receive {:slackbox_store, :view_open, %{view_id: ^view_id}}
+  end
+
+  test "close_view/1 removes the view and broadcasts :view_close" do
+    start_supervised!({Phoenix.PubSub, name: Slackbox.PubSub})
+    Phoenix.PubSub.subscribe(Slackbox.PubSub, "slackbox")
+
+    %{view_id: view_id} = Store.open_view("trig-1", %{"type" => "modal"})
+    assert length(Store.list_views()) == 1
+
+    assert :ok = Store.close_view(view_id)
+    assert Store.list_views() == []
+    assert_receive {:slackbox_store, :view_close, ^view_id}
+  end
+
+  test "clear/0 also clears views" do
+    Store.open_view("trig-1", %{"type" => "modal"})
+    assert length(Store.list_views()) == 1
+    assert :ok = Store.clear()
+    assert Store.list_views() == []
+  end
 end
