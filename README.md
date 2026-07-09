@@ -160,3 +160,34 @@ test "notifies #alerts on failure" do
 end
 ```
 
+## Sending to real Slack (prod)
+
+Swap in the `Live` adapter and give it a bot token — it's a thin
+[`Req`](https://hexdocs.pm/req)-based Slack Web API client:
+
+```elixir
+# config/prod.exs
+config :my_app, MyApp.Slack,
+  adapter: Slackbox.Adapters.Live,
+  token: System.get_env("SLACK_BOT_TOKEN")
+```
+
+The **same** `MyApp.Slack.post_message(...)` (and `update`, `delete`,
+`post_ephemeral`, `open_view`, `respond`) code runs in every environment — only
+the configured adapter changes:
+
+| Env  | Adapter                    | What happens                              |
+| ---- | -------------------------- | ----------------------------------------- |
+| dev  | `Slackbox.Adapters.Local`  | renders in the fake Slack dev UI          |
+| test | `Slackbox.Adapters.Test`   | captured for `assert_message_sent/1`      |
+| prod | `Slackbox.Adapters.Live`   | posts to the real Slack Web API           |
+
+`Live` maps each action to its Slack method (`chat.postMessage`, `chat.update`,
+`chat.delete`, `chat.postEphemeral`, `views.open`, and a direct POST to a
+`response_url` for `respond`), returns `{:ok, %{ts:, channel:}}` /
+`{:ok, %{view_id:}}` on success, and tagged errors otherwise —
+`{:error, {:slack, reason}}`, `{:error, {:rate_limited, retry_after}}`,
+`{:error, {:http, status}}`, or `{:error, :missing_token}`. Extra config keys:
+`:base_url` (defaults to `https://slack.com/api`) and `:req_options` (merged
+into every `Req` request, e.g. timeouts/retries).
+

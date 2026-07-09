@@ -170,7 +170,7 @@ Mounted in the host app's router behind a dev-only pipeline, e.g. `/dev/slack` (
 ## 9. Suggested build phases (for the implementation plan)
 
 1. **Core outbound + Test adapter.** `Message` struct + builders, `Notifier`, `Adapter` behaviour, `Test` adapter, `TestAssertions`. (Delivers value immediately: assertable Slack sending.)
-2. **Live adapter.** `Req`-based Web API client for the six methods; real bot-token config.
+2. **Live adapter.** `Req`-based Web API client for the six methods; real bot-token config. ✅ Done (`Slackbox.Adapters.Live`).
 3. **Local store + dashboard (outbound only).** `Store`, PubSub, LiveView Slack-clone UI rendering messages/blocks + raw inspector. (Delivers the "fake mailbox" experience.)
 4. **Inbound simulation — interactive components.** `Simulator`, `trigger_id`/`response_url` lifecycle, in-process `respond/2` routing, optional signing. The button-click loop.
 5. **Inbound simulation — modals/views + Events API.** Modal rendering + `view_submission`; event simulate control; `Slackbox.Test` inbound payload builders.
