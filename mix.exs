@@ -14,6 +14,7 @@ defmodule Slackbox.MixProject do
         "A Swoosh-style Slack library — send Slack messages through one choke point with per-environment adapters, plus a fake Slack dev UI and test assertions.",
       package: package(),
       name: "Slackbox",
+      source_url: "https://github.com/epinault/slackbox",
       docs: [main: "Slackbox", extras: ["README.md"]]
     ]
   end
@@ -72,7 +73,8 @@ defmodule Slackbox.MixProject do
 
   defp package do
     [
-      licenses: ["MIT"]
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/epinault/slackbox"}
     ]
   end
 end
