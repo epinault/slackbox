@@ -1,10 +1,13 @@
 defmodule Slackbox.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+  @source_url "https://github.com/epinault/slackbox"
+
   def project do
     [
       app: :slackbox,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -14,8 +17,13 @@ defmodule Slackbox.MixProject do
         "A Swoosh-style Slack library — send Slack messages through one choke point with per-environment adapters, plus a fake Slack dev UI and test assertions.",
       package: package(),
       name: "Slackbox",
-      source_url: "https://github.com/epinault/slackbox",
-      docs: [main: "Slackbox", extras: ["README.md"]]
+      source_url: @source_url,
+      homepage_url: @source_url,
+      docs: [
+        main: "Slackbox",
+        source_ref: "v#{@version}",
+        extras: ["README.md", "CHANGELOG.md"]
+      ]
     ]
   end
 
@@ -74,7 +82,10 @@ defmodule Slackbox.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/epinault/slackbox"}
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+      }
     ]
   end
 end
