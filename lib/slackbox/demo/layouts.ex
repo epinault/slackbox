@@ -139,7 +139,7 @@ defmodule Slackbox.Demo.Layouts do
       <body>
         {@inner_content}
         <script type="module">
-          import {Socket} from "https://esm.sh/phoenix@1.8.9"
+          import {Socket} from "https://esm.sh/phoenix@1.8.13"
           import {LiveSocket} from "https://esm.sh/phoenix_live_view@1.2.11"
           const csrf = document.querySelector("meta[name='csrf-token']").getAttribute("content")
           const liveSocket = new LiveSocket("/live", Socket, {params: {_csrf_token: csrf}})
