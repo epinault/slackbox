@@ -2,9 +2,10 @@ defmodule Slackbox.Store do
   @moduledoc """
   In-memory store of Slack messages for the fake-Slack dev UI.
 
-  A `GenServer` that keeps an ordered list of entries (insertion order). Each
-  entry is a map: `%{ts:, channel:, message:, raw:, at:}`. On every `put/1` and
-  `clear/0` it broadcasts `{:slackbox_store, op, entry_or_nil}` on the
+  A `GenServer` that keeps an ordered list of entries. Internally the lists are
+  newest-first (prepend on write) and reversed on read, so every `list_*`
+  function returns insertion order. Each entry is a map:
+  `%{ts:, channel:, message:, raw:, at:}`. On every `put/1` and `clear/0` it broadcasts `{:slackbox_store, op, entry_or_nil}` on the
   `"slackbox"` topic of the `Slackbox.PubSub` server — but only when that
   PubSub server is actually running, so the store stays usable in plain tests.
   """
@@ -111,12 +112,13 @@ defmodule Slackbox.Store do
     }
 
     broadcast(:put, entry)
-    {:reply, %{ts: ts, channel: message.channel}, %{state | entries: entries ++ [entry]}}
+    {:reply, %{ts: ts, channel: message.channel}, %{state | entries: [entry | entries]}}
   end
 
   def handle_call(:list_channels, _from, %{entries: entries} = state) do
     channels =
       entries
+      |> Enum.reverse()
       |> Enum.map(& &1.channel)
       |> Enum.uniq()
 
@@ -124,7 +126,12 @@ defmodule Slackbox.Store do
   end
 
   def handle_call({:list_messages, channel}, _from, %{entries: entries} = state) do
-    {:reply, Enum.filter(entries, &(&1.channel == channel)), state}
+    messages =
+      entries
+      |> Enum.reverse()
+      |> Enum.filter(&(&1.channel == channel))
+
+    {:reply, messages, state}
   end
 
   def handle_call(:clear, _from, state) do
@@ -133,10 +140,10 @@ defmodule Slackbox.Store do
   end
 
   def handle_call({:open_view, trigger_id, view}, _from, %{views: views} = state) do
-    view_id = "V" <> (:crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false))
+    view_id = "V" <> random_id()
     entry = %{view_id: view_id, trigger_id: trigger_id, view: view}
     broadcast(:view_open, entry)
-    {:reply, %{view_id: view_id}, %{state | views: views ++ [entry]}}
+    {:reply, %{view_id: view_id}, %{state | views: [entry | views]}}
   end
 
   def handle_call({:close_view, view_id}, _from, %{views: views} = state) do
@@ -145,11 +152,11 @@ defmodule Slackbox.Store do
   end
 
   def handle_call(:list_views, _from, %{views: views} = state) do
-    {:reply, views, state}
+    {:reply, Enum.reverse(views), state}
   end
 
   def handle_call({:register_response, channel, ts}, _from, %{tokens: tokens} = state) do
-    token = :crypto.strong_rand_bytes(12) |> Base.url_encode64(padding: false)
+    token = random_id()
     {:reply, token, %{state | tokens: Map.put(tokens, token, {channel, ts})}}
   end
 
@@ -185,6 +192,8 @@ defmodule Slackbox.Store do
 
   defp maybe_override(message, _key, nil), do: message
   defp maybe_override(message, key, value), do: Map.put(message, key, value)
+
+  defp random_id, do: Base.url_encode64(:crypto.strong_rand_bytes(12), padding: false)
 
   defp generate_ts do
     "#{System.system_time(:second)}.#{:erlang.unique_integer([:positive])}"

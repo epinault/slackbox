@@ -151,7 +151,7 @@ defmodule Slackbox.LiveAdapterTest do
         Plug.Conn.resp(conn, 200, "ok")
       end)
 
-    msg = Message.new() |> Message.text("replacing")
+    msg = Message.text(Message.new(), "replacing")
     url = "https://hooks.slack.com/actions/T1/B2/xyz"
 
     assert {:ok, %{}} =

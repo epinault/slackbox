@@ -26,13 +26,13 @@ defmodule Slackbox.Demo.SlackApp do
   plug(:dispatch)
 
   post "/interactivity" do
-    payload = conn.params["payload"] |> Jason.decode!()
+    payload = Jason.decode!(conn.params["payload"])
 
     case payload["type"] do
       "block_actions" -> handle_block_actions(conn, payload)
       "view_submission" -> handle_view_submission(conn, payload)
       "view_closed" -> send_resp(conn, 200, "ok")
-      _ -> send_resp(conn, 200, "ok")
+      _other -> send_resp(conn, 200, "ok")
     end
   end
 

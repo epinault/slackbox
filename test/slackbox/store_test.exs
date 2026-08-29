@@ -42,7 +42,7 @@ defmodule Slackbox.StoreTest do
 
     alerts = Store.list_messages("#alerts")
     assert Enum.map(alerts, & &1.message.text) == ["a", "c"]
-    assert Store.list_messages("#deploys") |> Enum.map(& &1.message.text) == ["b"]
+    assert Enum.map(Store.list_messages("#deploys"), & &1.message.text) == ["b"]
   end
 
   test "clear/0 empties the store" do

@@ -10,9 +10,9 @@ defmodule Slackbox.InteractiveLoopTest do
   @channel "#alerts"
 
   setup do
-    {:ok, _} = Application.ensure_all_started(:phoenix_live_view)
-    {:ok, _} = Application.ensure_all_started(:bandit)
-    {:ok, _} = Application.ensure_all_started(:req)
+    {:ok, _apps} = Application.ensure_all_started(:phoenix_live_view)
+    {:ok, _apps} = Application.ensure_all_started(:bandit)
+    {:ok, _apps} = Application.ensure_all_started(:req)
 
     {:ok, sup} = Slackbox.Demo.start(port: @port)
     Store.clear()
@@ -22,7 +22,7 @@ defmodule Slackbox.InteractiveLoopTest do
       Supervisor.stop(sup, :shutdown)
 
       receive do
-        {:DOWN, ^ref, :process, _, _} -> :ok
+        {:DOWN, ^ref, :process, _pid, _reason} -> :ok
       after
         2_000 -> :ok
       end
@@ -46,7 +46,7 @@ defmodule Slackbox.InteractiveLoopTest do
       ])
 
     Store.put(msg)
-    entry = Store.list_messages(@channel) |> List.last()
+    entry = List.last(Store.list_messages(@channel))
 
     assert {:ok, 200} =
              Slackbox.Simulator.click(
@@ -68,7 +68,7 @@ defmodule Slackbox.InteractiveLoopTest do
     do: flunk("store entry was never updated by the response_url loop")
 
   defp wait_for_update(ts, attempts) do
-    entry = Store.list_messages(@channel) |> Enum.find(&(&1.ts == ts))
+    entry = Enum.find(Store.list_messages(@channel), &(&1.ts == ts))
 
     if entry && entry.message.text =~ "✅" do
       entry.message.text

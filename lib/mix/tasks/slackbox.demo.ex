@@ -12,10 +12,10 @@ defmodule Mix.Tasks.Slackbox.Demo do
 
   @impl Mix.Task
   def run(_args) do
-    {:ok, _} = Application.ensure_all_started(:phoenix_live_view)
-    {:ok, _} = Application.ensure_all_started(:bandit)
-    {:ok, _} = Application.ensure_all_started(:req)
-    {:ok, _} = Slackbox.Demo.start()
+    {:ok, _apps} = Application.ensure_all_started(:phoenix_live_view)
+    {:ok, _apps} = Application.ensure_all_started(:bandit)
+    {:ok, _apps} = Application.ensure_all_started(:req)
+    {:ok, _sup} = Slackbox.Demo.start()
     Process.sleep(:infinity)
   end
 end

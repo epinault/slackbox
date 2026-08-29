@@ -16,10 +16,8 @@ defmodule Slackbox.SignatureTest do
     assert sig ==
              Signature.sign(@secret, @timestamp, @body)
 
-    assert sig ==
-             "v0=" <>
-               (:crypto.mac(:hmac, :sha256, @secret, "v0:#{@timestamp}:#{@body}")
-                |> Base.encode16(case: :lower))
+    mac = :crypto.mac(:hmac, :sha256, @secret, "v0:#{@timestamp}:#{@body}")
+    assert sig == "v0=" <> Base.encode16(mac, case: :lower)
   end
 
   test "valid?/4 accepts a matching signature and rejects a tampered body" do

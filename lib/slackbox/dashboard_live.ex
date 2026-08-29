@@ -137,15 +137,14 @@ defmodule Slackbox.DashboardLive do
 
   # Collect `"block_id::action_id"` form params into Block Kit `state.values`.
   defp collect_state(params) do
-    params
-    |> Enum.reduce(%{}, fn
+    Enum.reduce(params, %{}, fn
       {key, value}, acc ->
         case String.split(key, "::", parts: 2) do
           [block_id, action_id] ->
             entry = %{"type" => "plain_text_input", "value" => value}
             Map.update(acc, block_id, %{action_id => entry}, &Map.put(&1, action_id, entry))
 
-          _ ->
+          _other ->
             acc
         end
     end)
@@ -339,7 +338,7 @@ defmodule Slackbox.DashboardLive do
 
   defp block_text(%{"text" => %{"text" => text}}), do: text
   defp block_text(%{"text" => text}) when is_binary(text), do: text
-  defp block_text(_), do: ""
+  defp block_text(_block), do: ""
 
   defp channel_name(nil), do: nil
   defp channel_name("#" <> rest), do: rest
@@ -349,12 +348,12 @@ defmodule Slackbox.DashboardLive do
     String.upcase(String.first(username))
   end
 
-  defp avatar_initial(_), do: "B"
+  defp avatar_initial(_message), do: "B"
 
   defp format_time(ms) when is_integer(ms) do
     {:ok, dt} = DateTime.from_unix(ms, :millisecond)
-    :io_lib.format("~2..0B:~2..0B", [dt.hour, dt.minute]) |> to_string()
+    Calendar.strftime(dt, "%H:%M")
   end
 
-  defp format_time(_), do: ""
+  defp format_time(_other), do: ""
 end
