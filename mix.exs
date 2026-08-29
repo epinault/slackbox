@@ -16,6 +16,7 @@ defmodule Slackbox.MixProject do
       description:
         "A Swoosh-style Slack library — send Slack messages through one choke point with per-environment adapters, plus a fake Slack dev UI and test assertions.",
       package: package(),
+      usage_rules: usage_rules(),
       name: "Slackbox",
       source_url: @source_url,
       homepage_url: @source_url,
@@ -60,10 +61,23 @@ defmodule Slackbox.MixProject do
       # Code quality and documentation
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
-      {:usage_rules, "~> 0.1", only: :dev, runtime: false},
+      {:usage_rules, "~> 1.2", only: :dev, runtime: false},
 
       # Static type checking (dialyxir selected)
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  # `mix usage_rules.sync` config — maintains the usage-rules block in AGENTS.md.
+  defp usage_rules do
+    [
+      file: "AGENTS.md",
+      usage_rules: [
+        :usage_rules,
+        {"phoenix:phoenix", link: :markdown},
+        {"phoenix:liveview", link: :markdown},
+        {"phoenix:html", link: :markdown}
+      ]
     ]
   end
 
