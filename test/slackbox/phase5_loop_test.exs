@@ -20,7 +20,15 @@ defmodule Slackbox.Phase5LoopTest do
 
     on_exit(fn ->
       ref = Process.monitor(sup)
-      Supervisor.stop(sup, :shutdown)
+
+      # The supervisor is linked to the (already dead) test process, so it may
+      # be shutting down concurrently; stopping it then exits with :shutdown
+      # (or :noproc). Tolerate that and still wait for termination below.
+      try do
+        Supervisor.stop(sup, :shutdown)
+      catch
+        :exit, _reason -> :ok
+      end
 
       receive do
         {:DOWN, ^ref, :process, _pid, _reason} -> :ok
