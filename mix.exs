@@ -13,6 +13,7 @@ defmodule Slackbox.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      test_coverage: [summary: [threshold: 55]],
       description:
         "A Swoosh-style Slack library — send Slack messages through one choke point with per-environment adapters, plus a fake Slack dev UI and test assertions.",
       package: package(),
