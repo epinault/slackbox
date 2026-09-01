@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+
+    env:
+      MIX_ENV: test
+
+    strategy:
+      # https://hexdocs.pm/elixir/compatibility-and-deprecations.html#between-elixir-and-erlang-otp
+      matrix:
+        include:
+          # Latest
+          - elixir: "1.20"
+            otp: 29
+          - elixir: "1.20"
+            otp: 28
+          # 1.19
+          - elixir: 1.19
+            otp: 28
+          - elixir: 1.19
+            otp: 27
+          # 1.18
+          - elixir: 1.18
+            otp: 27
+          - elixir: 1.18
+            otp: 26
+          # 1.17
+          - elixir: 1.17
+            otp: 27
+          - elixir: 1.17
+            otp: 26
+          # Older supported (mix.exs requires ~> 1.15)
+          - elixir: 1.16
+            otp: 26
+          - elixir: 1.15
+            otp: 26
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          elixir-version: ${{matrix.elixir}}
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: test-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-ref-${{ github.head_ref || github.ref }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            test-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-ref-${{ github.head_ref || github.ref }}-mix-
+            test-otp-${{ matrix.otp }}-elixir-${{ matrix.elixir }}-ref-refs/heads/main-mix-
+
+      - run: mix deps.get
+      - run: mix deps.unlock --check-unused
+      - run: mix deps.compile
+      - run: mix compile --warnings-as-errors
+      - run: mix credo --strict --format=oneline
+      - run: mix test --warnings-as-errors --cover
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20"
+          otp-version: 29
+      - run: mix format --check-formatted

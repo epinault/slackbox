@@ -22,9 +22,8 @@ defmodule Slackbox.Signature do
   def sign(signing_secret, timestamp, body) do
     base = "#{@version}:#{timestamp}:#{body}"
 
-    digest =
-      :crypto.mac(:hmac, :sha256, signing_secret, base)
-      |> Base.encode16(case: :lower)
+    mac = :crypto.mac(:hmac, :sha256, signing_secret, base)
+    digest = Base.encode16(mac, case: :lower)
 
     "#{@version}=#{digest}"
   end

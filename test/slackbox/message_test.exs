@@ -105,9 +105,10 @@ defmodule Slackbox.MessageTest do
     end
 
     test "includes optional identity/threading fields when set" do
-      payload =
+      msg =
         new(channel: "#alerts", ts: "1.2", thread_ts: "0.1", user: "U1", username: "deploybot")
-        |> Slackbox.Message.to_payload()
+
+      payload = Slackbox.Message.to_payload(msg)
 
       assert payload["ts"] == "1.2"
       assert payload["thread_ts"] == "0.1"

@@ -4,7 +4,7 @@ defmodule Slackbox.Demo do
 
   `Slackbox.Demo.start/1` boots a self-contained supervision tree (PubSub, the
   in-memory `Slackbox.Store`, and a Phoenix endpoint serving
-  `Slackbox.DashboardLive`), seeds a few messages, and prints the URL. Push more
+  `Slackbox.DashboardLive`), seeds a few messages, and logs the URL. Push more
   messages live from IEx with `Slackbox.Demo.post/2` and watch them appear.
   """
 
@@ -12,6 +12,8 @@ defmodule Slackbox.Demo do
 
   alias Slackbox.Message
   alias Slackbox.Store
+
+  require Logger
 
   @default_port 4000
 
@@ -51,7 +53,7 @@ defmodule Slackbox.Demo do
     case Supervisor.start_link(children, strategy: :one_for_one, name: Slackbox.Demo.Supervisor) do
       {:ok, pid} ->
         seed()
-        IO.puts("slackbox demo running at http://localhost:#{port}")
+        Logger.info("slackbox demo running at http://localhost:#{port}")
         {:ok, pid}
 
       other ->

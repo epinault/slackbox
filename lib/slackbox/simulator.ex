@@ -134,7 +134,7 @@ defmodule Slackbox.Simulator do
       "type" => "event_callback",
       "team_id" => "T_SLACKBOX",
       "api_app_id" => @api_app_id,
-      "event_id" => "Ev" <> (:erlang.unique_integer([:positive]) |> Integer.to_string()),
+      "event_id" => "Ev" <> Integer.to_string(:erlang.unique_integer([:positive])),
       "event_time" => System.system_time(:second),
       "event" => event
     }

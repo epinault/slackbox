@@ -129,7 +129,8 @@ defmodule Slackbox.Adapters.Live do
   end
 
   defp respond_body(msg, opts) do
-    Message.to_payload(msg)
+    msg
+    |> Message.to_payload()
     |> maybe_put("replace_original", Keyword.get(opts, :replace_original))
     |> maybe_put("response_type", Keyword.get(opts, :response_type))
   end
@@ -147,7 +148,7 @@ defmodule Slackbox.Adapters.Live do
   defp fetch_token(config) do
     case Keyword.get(config, :token) do
       token when is_binary(token) and token != "" -> {:ok, token}
-      _ -> :error
+      _missing -> :error
     end
   end
 
@@ -157,14 +158,14 @@ defmodule Slackbox.Adapters.Live do
 
   defp retry_after(%Req.Response{} = resp) do
     case Req.Response.get_header(resp, "retry-after") do
-      [value | _] -> parse_retry_after(value)
+      [value | _rest] -> parse_retry_after(value)
       [] -> nil
     end
   end
 
   defp parse_retry_after(value) do
     case Integer.parse(value) do
-      {seconds, _} -> seconds
+      {seconds, _rest} -> seconds
       :error -> nil
     end
   end
