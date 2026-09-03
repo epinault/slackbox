@@ -31,15 +31,10 @@ jobs:
             otp: 27
           - elixir: 1.18
             otp: 26
-          # 1.17
+          # 1.17 (mix.exs requires ~> 1.17)
           - elixir: 1.17
             otp: 27
           - elixir: 1.17
-            otp: 26
-          # Older supported (mix.exs requires ~> 1.15)
-          - elixir: 1.16
-            otp: 26
-          - elixir: 1.15
             otp: 26
 
     steps:
