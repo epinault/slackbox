@@ -1,51 +1,242 @@
 # AGENTS.md
 
-This file defines agent roles, constraints, and integration points for AI-assisted development in this repository.
+Slackbox is an Elixir library (published to hex.pm, MIT) that works like Swoosh for Slack: an app defines one
+notifier module (`use Slackbox.Notifier`), every outbound Slack call flows through that choke point, and a
+per-environment adapter decides what happens (real Slack Web API, an in-memory fake Slack dev UI, or message capture
+for tests). It also simulates inbound Slack interactions (block actions, modal submissions, Events API) with signed
+requests. Users are Elixir/Phoenix app developers. There is no deployment target: the artifacts are the hex package
+and the HexDocs site. There is no database, no migrations, and no OTP application callback (`mix.exs` has no `mod:`).
 
-## Agent Roles
+## Project Overview
 
-### Claude Code (primary development agent)
+| Item | Value |
+|---|---|
+| Elixir / OTP (pinned) | 1.20.4-otp-29 / 29.0.5 (`.tool-versions`, `mise.toml`); `mix.exs` requires `~> 1.15` |
+| Version | `0.1.0` (`@version` in `mix.exs`); changelog in `CHANGELOG.md` (Keep a Changelog, SemVer) |
+| Phoenix / LiveView | 1.8.13 / 1.2.11 locked (declared `~> 1.7` / `~> 1.0`); Bandit 1.12.5, Plug 1.20.3 |
+| HTTP client | `req ~> 0.5` (locked 0.7.4); JSON via `jason` |
+| Dev tools | `credo ~> 1.7`, `dialyxir ~> 1.4`, `ex_doc ~> 0.34` (dev only), `usage_rules ~> 1.2` (dev only) |
+| Persistence | none; `Slackbox.Store` is an in-memory GenServer |
+| CI | GitHub Actions (`.github/workflows/`), remote `github.com/epinault/slackbox` |
+| Root module | `Slackbox`; demo endpoint `Slackbox.Demo.Endpoint`; no Repo |
 
-Responsible for:
-- Writing, editing, and refactoring code in `lib/` and `test/`
-- Running `mix precommit` before every commit
-- Keeping `CLAUDE.md` up to date when architecture changes
+Phoenix, LiveView, Bandit and Req are real runtime deps because the dev UI and demo server ship in the package.
 
-### Code Review Agent (`/code-review`)
+## Essential Commands
 
-Invoked by the developer to review changes. Reads diff, checks for architectural drift, suggests improvements. Does not modify code directly.
+Only these aliases exist (`mix.exs`): `setup` (= `deps.get`) and `precommit`.
 
-## usage_rules Integration
-
-This project uses the [`usage_rules`](https://hexdocs.pm/usage_rules) package to pull dependency-provided
-usage rules (Elixir/OTP guidance, Phoenix, LiveView, HEEx) into the marker-delimited
-`usage-rules` block (HTML-comment start/end markers) at the bottom of this file.
-
-Which packages are included is configured under the `:usage_rules` key in `mix.exs` (`usage_rules/0`) —
-that config is the source of truth, and the block is regenerated (never hand-edited) with:
-
-```sh
-mix usage_rules.sync
+### Setup
+```bash
+mix setup
 ```
 
-**When to re-run:** after `mix deps.get` / `mix deps.update` moves `phoenix`, `phoenix_live_view`, or
-`usage_rules`, or after changing the `:usage_rules` config in `mix.exs`. Linked rules point at
-`deps/<pkg>/usage-rules/*.md`, so run `mix deps.get` first.
+### Dev (fake Slack UI)
+```bash
+mix slackbox.demo              # boots demo server at http://localhost:4000 (blocks forever)
+iex -S mix                     # then: Slackbox.Demo.start(port: 4000); Slackbox.Demo.post("hi", "#alerts")
+```
 
-Agents should read the usage-rules block before writing Elixir, Phoenix, or LiveView code in this repo.
+### Test
+```bash
+mix test                                          # whole suite
+mix test test/slackbox/store_test.exs             # one file
+mix test test/slackbox/store_test.exs:12          # one test by line
+mix test --warnings-as-errors --cover             # what CI runs; coverage threshold is 55% (mix.exs test_coverage)
+```
 
-## Constraints — What Agents Must Never Do
+### Quality
+```bash
+mix precommit    # compile --warnings-as-errors, format --check-formatted, credo --strict, test (runs in MIX_ENV=test)
+mix dialyzer     # dialyxir is a dep but NOT part of precommit or CI; no PLT cache is configured
+```
 
-- **Never bypass `mix precommit`** — all four checks must pass before committing
-- **Never commit with TODO comments** — Credo's `TagTODO` check exits with status 2
-- **Never modify `mix.lock` manually** — only `mix deps.get` / `mix deps.update` should touch it
-- **Never add `IO.inspect` or `IEx.pry` to committed code** — these fail Credo
+### Docs and publishing
+```bash
+mix docs         # ExDoc into doc/ (main: Slackbox; extras: README.md, CHANGELOG.md)
+mix hex.build    # verify the package builds; produces slackbox-*.tar (gitignored)
+mix usage_rules.sync   # regenerate the usage-rules block at the bottom of this file
+```
+Releasing (`mix hex.publish`) is a human action; see Constraints.
 
-## Project Context
+## Architecture
 
-- **App module:** `Slackbox`
-- **Test isolation:** Standard ExUnit — use `async: true` where safe
-- **Key patterns:** Adapter pattern (like Swoosh), per-environment configuration, test assertions via the `Slackbox.Test` module
+```
+lib/
+  slackbox.ex                 Moduledoc-only top-level module (no functions)
+  slackbox/
+    adapter.ex                Slackbox.Adapter behaviour (single call/3 callback)
+    adapters/live.ex          Real Slack Web API via Req (needs :token)
+    adapters/local.ex         Writes to Slackbox.Store; powers the dev UI
+    adapters/test.ex          Sends {:slackbox, action, args} to self() and $callers
+    notifier.ex               `use Slackbox.Notifier, otp_app:` macro + dispatch/4
+    message.ex                Slackbox.Message struct + pipe builders + Block Kit helpers (section/actions/button, action_ids)
+    store.ex                  In-memory GenServer: messages, channels, views, response tokens; broadcasts on PubSub
+    simulator.ex              Builds/sends inbound payloads (block_actions, view_submission, view_closed, event_callback)
+    signature.ex              Slack v0 request signing (sign/3, valid?/4)
+    response_plug.ex          Plug.Router receiving response_url callbacks -> Store.apply_response/2
+    dashboard_live.ex         Slackbox.DashboardLive, the fake Slack LiveView UI
+    test.ex                   Slackbox.Test payload builders (block_actions/1, view_submission/1, event/2, form_body, signature_headers)
+    test_assertions.ex        assert_message_sent, assert_ephemeral_sent, assert_message_updated, assert_view_opened, refute_message_sent
+    demo.ex                   Slackbox.Demo.start/1 + post/2; seeds sample messages
+    demo/{endpoint,router,layouts,slack_app}.ex   Demo-only Phoenix endpoint, router, root layout, sample app receiving simulated Slack requests
+  mix/tasks/slackbox.demo.ex  `mix slackbox.demo`
+test/
+  test_helper.exs             Sets TestNotifier adapter to Adapters.Test, ExUnit.start()
+  support/test_notifier.ex    Slackbox.TestNotifier (compiled only in :test via elixirc_paths)
+  slackbox_test.exs, slackbox/*_test.exs   One test file per module, plus loop tests (interactive_loop_test, phase5_loop_test)
+docs/superpowers/             Design spec and Phase 1 plan (historical)
+```
+
+### Public API surface
+
+- `Slackbox.Notifier` (`use ... otp_app: :my_app`) generates `post_message/1,2` (alias `deliver/1,2`),
+  `post_ephemeral/1,2`, `update/1,2`, `delete/1,2`, `open_view/2,3`, `respond/2,3`. The trailing `opts` are
+  runtime overrides merged over the adapter config; message content belongs on `Slackbox.Message`.
+- `Slackbox.Message` builders, `Slackbox.Test` payload builders, `Slackbox.TestAssertions`, `Slackbox.Signature`,
+  `Slackbox.ResponsePlug`, `Slackbox.DashboardLive`, `Slackbox.Store`, `Slackbox.Simulator`, `Slackbox.Demo`.
+- Anything marked `@moduledoc false` or `@doc false` (e.g. `Notifier.dispatch/4`, `Demo.*` router/endpoint) is internal.
+- Adding, removing or renaming a public function is a user-visible change: update `CHANGELOG.md` under `[Unreleased]`.
+
+### Adapter contract (`Slackbox.Adapter`)
+
+```elixir
+@type action :: :post_message | :post_ephemeral | :update | :delete | :open_view | :respond
+@callback call(action(), args :: map(), config :: keyword()) :: {:ok, map()} | {:error, term()}
+```
+- `args` shapes: `%{message:, opts:}` for post_message/post_ephemeral/update/delete; `%{trigger_id:, view:, opts:}`
+  for open_view; `%{response_url:, message:, opts:}` for respond.
+- `config` is the app's `config :my_app, MyNotifier, ...` keyword merged with per-call `opts`. `:adapter` is
+  required (`Keyword.fetch!` in `dispatch/4`, so a missing adapter raises `KeyError`).
+- Return shapes: post_message/update -> `{:ok, %{ts:, channel:}}`; open_view -> `{:ok, %{view_id:}}`; others `{:ok, %{}}`.
+  Errors are tagged tuples and adapters never raise into the caller. Live uses `{:error, {:slack, reason}}`,
+  `{:error, {:rate_limited, retry_after | nil}}`, `{:error, {:http, status}}`, `{:error, :missing_token}`, or the transport exception.
+- A new adapter must `@behaviour Slackbox.Adapter`, use `@impl Slackbox.Adapter`, pattern-match on the action atom, and handle all six actions.
+  Adding an action means touching `Adapter.action`, `Notifier`, all three adapters, `TestAssertions` if capturable, README and CHANGELOG.
+
+### Dev UI wiring
+
+- `Slackbox.Adapters.Local` -> `Slackbox.Store.put/1` -> `Phoenix.PubSub.broadcast(Slackbox.PubSub, "slackbox", {:slackbox_store, op, entry})`
+  (only when the PubSub process is running, so the Store works in plain tests) -> `Slackbox.DashboardLive` subscribes and re-renders.
+- The library has no supervision tree of its own. A host app must start `{Phoenix.PubSub, name: Slackbox.PubSub}`,
+  `Slackbox.Store`, and mount `live "/", Slackbox.DashboardLive` itself. `Slackbox.Demo.start/1` is the reference wiring:
+  it sets app env for `Slackbox.Demo.Endpoint` (Bandit adapter, fixed dev secret) and `:simulator`, then starts
+  PubSub, Store and Endpoint under `Slackbox.Demo.Supervisor`.
+- Demo router: `/` -> DashboardLive, `/demo` -> `Slackbox.Demo.SlackApp` (receives simulated interactivity/events),
+  `/slackbox/response` -> `Slackbox.ResponsePlug`.
+- Inbound loop: dashboard click -> `Simulator.click/3` builds a `block_actions` payload with a `response_url`
+  (`<response_base>/<token>`, token from `Store.register_response/2`), signs it with `Signature` if a signing secret is set,
+  POSTs via Req to the app's `interactivity_url`; the app answers to `response_url`, `ResponsePlug` calls `Store.apply_response/2`.
+- Simulator config: `Application.get_env(:slackbox, :simulator, %{})` with keys `interactivity_url`, `events_url`,
+  `response_base`, `signing_secret`, `user`.
+
+## Conventions
+
+- Formatter: default `mix format` over `{mix,.formatter}.exs` and `{config,lib,test}/**/*.{ex,exs}`.
+- Credo strict (`.credo.exs`): max line length 120; `StrictModuleLayout` (`@moduledoc` -> `use` -> `import` -> `alias` -> `require`
+  -> attributes -> functions); `AliasOrder`, `MultiAlias`, `SinglePipe`, `BlockPipe`, `WithSingleClause`; `UnusedVariableNames` forced
+  meaningful (no bare `_`; use `_rest`, `_config`); `TagTODO` exits with status 2; `ABCSize` max 50; `ModuleDoc` required.
+- Docs policy: `@moduledoc` on every module (`@moduledoc false` for internal ones); `@doc` and `@spec` on public functions.
+- Adapters pattern-match on the action atom in `call/3` clause heads; helper clauses are `defp`.
+- Fallible operations return `{:ok, _} | {:error, _}`; do not raise for control flow in library code.
+- The Store is accessed only via its public functions (GenServer.call with the module as the registered name by default).
+- Dependencies of the dev UI (Phoenix, LiveView, Bandit) are compile-time deps of the package; do not add heavy new runtime deps. Keep
+  the public surface small.
+- Dev UI uses plain inline HTML/CSS in `Slackbox.Demo.Layouts` and `DashboardLive`: no Tailwind, daisyUI or asset pipeline.
+
+## Testing
+
+- Plain ExUnit, one file per module under `test/slackbox/`. Default to `use ExUnit.Case, async: true`; use `async: false` only for tests
+  touching the globally named `Slackbox.Store`, `Application.put_env(:slackbox, :simulator, ...)`, or the demo server.
+- `test/test_helper.exs` points `Slackbox.TestNotifier` (in `test/support/test_notifier.ex`) at `Slackbox.Adapters.Test`.
+- Adapter tests: call `Adapter.call/3` directly and assert on return shape (Test, Local), or use `assert_received {:slackbox, action, args}`.
+  The Test adapter also delivers to `$callers`, so captures survive `Task.async`.
+- Live adapter: `live_adapter_test.exs` stubs Slack with Req's `plug:` via the `:req_options` / `:base_url` config; never hit the real
+  Slack API in tests.
+- Loop tests (`interactive_loop_test.exs`, `phase5_loop_test.exs`) start the demo/server pieces and exercise the signed inbound loop
+  end to end; they tolerate an already-terminating `Slackbox.Demo.Supervisor` in cleanup.
+- Coverage gate: `mix test --cover` fails under 55%.
+- Example:
+
+```elixir
+test "call/3 sends the action tuple to the current process" do
+  msg = Message.new(channel: "#alerts", text: "hi")
+  assert {:ok, %{ts: ts, channel: "#alerts"}} = Test.call(:post_message, %{message: msg, opts: []}, [])
+  assert is_binary(ts)
+  assert_received {:slackbox, :post_message, %{message: ^msg}}
+end
+```
+- Avoid `Process.sleep` in new tests (the loop tests still use 20ms sleeps for async HTTP settling); prefer `assert_receive` or process calls.
+- CI matrix (GitHub Actions) covers Elixir 1.15 through 1.20 on OTP 26-29, so do not use syntax or stdlib functions newer than Elixir 1.15
+  in `lib/` without checking. CI also runs `mix deps.unlock --check-unused`.
+
+## Elixir / Phoenix Guidelines
+
+- Phoenix 1.8 / LiveView 1.2 are locked, but the declared minimums are Phoenix 1.7 / LiveView 1.0. Write code that works on those
+  minimums (no APIs introduced later) since users of the library choose their own versions.
+- This is a library: never read `Application.get_env` at compile time for user config; resolve at runtime (as `Notifier.dispatch/4` does).
+- No `use MyAppWeb` helpers exist here; LiveView/Router modules `use Phoenix.LiveView` / `use Phoenix.Router` directly.
+- Prefer pattern matching and `with`; avoid nested `case`; no `String.to_atom` on user input; `@impl true` (or `@impl Behaviour`) on callbacks.
+- Use `Req` for HTTP (already used by Live and Simulator); do not add another HTTP client.
+- Keep GenServer state simple (the Store is `%{entries:, tokens:, views:}`); use `call` for back-pressure.
+- Do not add `config/*.exs` to the library; configuration is documented for the host app in the README.
+
+## Workflow for Agents
+
+1. Read the module you change and its test file; for adapter work read `lib/slackbox/adapter.ex` and all three adapters.
+2. Write or adjust the test first.
+3. Implement. Keep the public API small and documented (`@moduledoc`, `@doc`, `@spec`).
+4. Update `README.md` for user-facing behavior and `CHANGELOG.md` under `[Unreleased]`.
+5. Run `mix precommit`; also run `mix docs` and `mix hex.build` when you touched docs, `mix.exs` package config, or version.
+6. Commit with conventional commits (history uses `feat:`, `fix:`, `docs:`, `chore:`, `build(deps):`, `ci:`, `style:`, `test:`) on a
+   branch; work lands via GitHub pull requests (`epinault/slackbox`, `main`).
+7. Re-run `mix usage_rules.sync` after dependency updates that move `phoenix`, `phoenix_live_view` or `usage_rules`, or after editing
+   the `usage_rules/0` config in `mix.exs` (run `mix deps.get` first).
+
+Release checklist (human-driven): bump `@version` in `mix.exs`, move `[Unreleased]` entries into a dated version section in `CHANGELOG.md`,
+run `mix precommit`, `mix docs`, `mix hex.build`, tag `v<version>` (docs use `source_ref: "v#{@version}"`), then `mix hex.publish`.
+
+## Constraints — Never Do
+
+- Never bypass `mix precommit`, and never commit with `--no-verify`.
+- Never commit TODO comments (Credo `TagTODO` exits with status 2) or `IO.inspect` / `IEx.pry` / `dbg`.
+- Never edit `mix.lock` by hand; use `mix deps.get` / `mix deps.update`.
+- Never hand-edit the usage-rules block below; regenerate with `mix usage_rules.sync`.
+- Never run `mix hex.publish`, `mix hex.retire` or `mix hex.revert`, or bump the version, unless the user explicitly asks.
+- Never call the real Slack API from tests, or commit real tokens/signing secrets (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `xoxb-...`).
+- Never break the adapter contract (`call/3` signature or return shapes) without a CHANGELOG entry and a version decision.
+- Never add Mix-env-specific behavior (`Mix.env()`) to code under `lib/` that ships in the package, other than the Mix task.
+- Don't commit `doc/`, `cover/`, `_build/`, `deps/`, or `slackbox-*.tar` (gitignored).
+
+## Gotchas
+
+- `Slackbox.Store` and `Slackbox.PubSub` are not started automatically; tests or hosts that need them must start them.
+  `Store.put/1` skips broadcasting when PubSub is not running.
+- `Slackbox.Demo.start/1` mutates global app env (`:simulator`, `Slackbox.Demo.Endpoint`); tests using it must be `async: false`.
+- `mix slackbox.demo` blocks with `Process.sleep(:infinity)`; run it in the background or use `iex -S mix` with `Demo.start/0`.
+- The demo endpoint uses a fixed insecure `secret_key_base` and binds 127.0.0.1; it is for local dev only.
+- `Notifier.dispatch/4` raises `KeyError` if `:adapter` is not configured for the notifier module.
+- `mix docs`, `credo` and `usage_rules` are dev/test-only deps; `mix docs` must run in dev (the default).
+- `dialyxir` is installed but unused in CI; expect possible unreviewed warnings if you run it.
+- Test file `phase5_loop_test.exs` is named after a development phase, not a feature; keep naming in mind when searching.
+- `.claude/settings.json` lists plugins including `claude-mem` and `elixir-scaffold`.
+- README documents behavior users rely on (simulator config, `Slackbox.Test` helpers); keep it in sync with code.
+
+## Key Files
+
+- `lib/slackbox/notifier.ex` - the `use` macro and adapter dispatch
+- `lib/slackbox/adapter.ex` - adapter behaviour contract
+- `lib/slackbox/adapters/live.ex` - real Slack Web API client, error shapes
+- `lib/slackbox/adapters/local.ex`, `lib/slackbox/adapters/test.ex` - dev UI and test capture adapters
+- `lib/slackbox/message.ex` - message struct and Block Kit builders
+- `lib/slackbox/store.ex` - in-memory state and PubSub broadcast
+- `lib/slackbox/simulator.ex`, `lib/slackbox/signature.ex` - inbound simulation and request signing
+- `lib/slackbox/dashboard_live.ex`, `lib/slackbox/demo.ex` - dev UI and its wiring
+- `lib/slackbox/test_assertions.ex`, `lib/slackbox/test.ex` - public test helpers
+- `test/test_helper.exs`, `test/support/test_notifier.ex` - test setup
+- `mix.exs` - deps, `precommit` alias, package, docs and usage_rules config
+- `CHANGELOG.md`, `README.md` - user-facing docs; `.github/workflows/ci.yml` - CI
+- `docs/superpowers/specs/2026-07-02-slackbox-design.md` - original design spec
 
 <!-- usage-rules-start -->
 <!-- usage_rules-start -->
