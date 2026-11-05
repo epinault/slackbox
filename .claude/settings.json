@@ -5,5 +5,10 @@
     "code-review@claude-plugins-official",
     "claude-mem@thedotmack",
     "elixir-scaffold"
-  ]
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(sgrep *)"
+    ]
+  }
 }

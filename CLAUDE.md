@@ -1,10 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Claude Code guidance for this repository. The canonical agent instructions live in AGENTS.md.
+
+@AGENTS.md
 
 ## Plugin Setup
 
-Run once after cloning:
+Run once after cloning (also listed in `.claude/settings.json`):
 
 ```bash
 claude plugin install elixir@claude-code-elixir
@@ -14,40 +16,12 @@ claude plugin install claude-mem@thedotmack
 claude plugin install elixir-scaffold
 ```
 
-## Project Overview
+## Claude-specific notes
 
-Elixir library published to hex.pm.
-
-**Module:** `Slackbox`
-
-## Essential Commands
-
-```bash
-mix setup        # install deps
-mix test         # run all tests
-mix docs         # generate documentation (ex_doc)
-mix hex.build    # verify hex package builds cleanly
-mix precommit    # full quality gate — run before every commit
-```
-
-**Always run `mix precommit` before committing.**
-
-## Architecture
-
-Public API lives in `lib/slackbox.ex`. Keep the surface area small — expose only what users need. Internal implementation modules go in `lib/slackbox/`.
-
-Add `@moduledoc`, `@doc`, and `@spec` to all public functions.
-
-## Code Quality Standards
-
-- Max line length: 120 characters
-- `@moduledoc` required on all modules
-- `@doc` and `@spec` required on all public functions
-- Strict module layout: `use → import → alias → require → attributes → functions`
-- Run `mix precommit` before every commit
-
-## Key Files
-
-- `lib/slackbox.ex` — public API
-- `mix.exs` — package metadata, deps, docs config
-- `README.md` — user-facing documentation
+- Run `mix precommit` before every commit; for anything touching docs or `mix.exs` package config also run `mix docs` and `mix hex.build`.
+- Use the `superpowers` skills for non-trivial work (brainstorming before new features, test-driven-development, verification-before-completion).
+  Past design material is in `docs/superpowers/`.
+- Use `/code-review` for review; it should not modify code.
+- Use the `update-dependencies` skill for dep bumps, then `mix usage_rules.sync`.
+- Never run `mix hex.publish` yourself; releases are a human step.
+- Keep AGENTS.md as the single source of truth; do not copy its content here.
